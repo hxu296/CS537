@@ -1,0 +1,6 @@
+alias ls /bin/ls
+alias pwd /bin/pwd
+pwd
+ls
+/bin/ls > output.txt
+exit

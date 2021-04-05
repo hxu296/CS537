@@ -1,0 +1,8 @@
+alias a b
+alias b c
+alias
+unalias a
+alias
+unalias b
+alias
+exit

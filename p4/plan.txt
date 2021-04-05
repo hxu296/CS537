@@ -1,0 +1,44 @@
+1. add time_slice field for process in proc.h
+2. add int setslice system call
+    usys.S
+    syscall.h
+    sysproc.c
+    proc.c
+    syscall.c
+    user.h
+    defs.h
+3. add int getslice system call
+4. add fork2 system call
+5. change userinit to initialize first time_slice 
+
+6. add in round robin data structures
+7. change scheduler to iterate on round robin
+
+round robin queue operations: 
+case 1: process finishes, remove it from the queue
+case 2: process sleeps, remove it from the queue
+case 3: process wakes up / new process gets scheduled, put it to tail
+case 4: timer interrupt happens, 3a: process used up time slice, put to tail; 3b: process still has unused time tick, do nothing
+
+round robin scheduler: 
+in each timer tick:
+    // queue operation
+    if top process in queue finishes or sleeps:
+        remove it from queue
+    else if process used up time tick:
+        make it runnable
+        put it to tail
+    else:
+        continue
+    // table operation
+    for each process in ptable:
+        if process is runnable and not in queue:
+            put it to tail
+
+process new fields:
+proc->in_queue
+
+
+6. figure out how to add compensation tick
+7. add getpinfo system call
+8. add compensation tick mechanism

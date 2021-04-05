@@ -1,0 +1,8 @@
+a.out
+arr_shell.c
+input.txt
+mysh
+output.txt
+redirection.txt
+shell.c
+test_alias

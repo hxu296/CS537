@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="WebServers">
+    <option name="servers">
+      <webServer id="3b246e12-d606-40e3-bc7d-a1f8d4b23aeb" name="csl" url="http://best-linux.cs.wisc.edu">
+        <fileTransfer rootFolder="/afs/cs.wisc.edu/u/h/u/huanx" accessType="SFTP" host="best-linux.cs.wisc.edu" port="22" sshConfigId="8b0326a0-a805-4630-8c0e-1f5b4b9ae2b8" sshConfig="huanx@best-linux.cs.wisc.edu:22 password">
+          <advancedOptions>
+            <advancedOptions dataProtectionLevel="Private" passiveMode="true" shareSSLContext="true" />
+          </advancedOptions>
+        </fileTransfer>
+      </webServer>
+    </option>
+  </component>
+</project>
