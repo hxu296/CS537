@@ -55,6 +55,61 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
   return &pgtab[PTX(va)];
 }
 
+int
+mencrypt(pde_t *pgdir, unit uva, int len)
+{
+    // todo: what if uva is page-aligned?
+    // make sure uva and len are in reasonable range
+    if(len < 0 || uva + PGSIZE * len > KERNBASE)
+        return -1;
+
+    // make sure pages in range have right permissions
+    pde_t *pde;
+    pte_t *pte;
+    pte_t *pgtab;
+    pte_t *pte_arr[len];
+    int i, j;
+
+    for(i = 0; i < len; i++) {
+        pde = &pgdir[PDX(uva)];
+        if (*pde & PTE_P) {
+            pgtab = (pte_t *) P2V(PTE_ADDR(*pde));
+        } else {
+            return -1;
+        }
+        pte = &pgtab[PTX(uva)];
+        // make sure the page hamission. It is an user page and it is present
+        if (*pte & PTE_W && *pte & PTE_U && (*pte & PTE_P ^ (*pte & PTE_E))){
+            pte_arr[i] = pte;
+        } else{
+            return -1;
+        }
+
+        uva = PGROUNDUP(uva) // move to the next page
+    }
+
+    // encrypt pages in ka_arr
+    pte_t * pte_runner;
+    char *ka; // runner
+
+    for(i = 0; i < len; i++)
+    {
+        if(*pte & PTE_E) continue;  // already encrypted, skip
+        pte_runner = pte_arr[i];
+        ka = (char*) P2V(PTE_ADDR(*pte_runner));  // this is lowest kernel address of the page
+        for (j = 0; j < PGSIZE; j++) // flip all bits in this page
+            *(ka + j) ^= 0xFF;
+        // set encrypted to 1, set present to 0
+        pte_runner = pte_runner | PTE_E;
+        pte_runner = pte_runner & (~PTE_P);
+    }
+
+    // flush TLB
+    switchuvm(myproc());
+
+    return 0;
+}
+
 // Create PTEs for virtual addresses starting at va that refer to
 // physical addresses starting at pa. va and size might not
 // be page-aligned.
@@ -385,6 +440,7 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
   }
   return 0;
 }
+
 
 //PAGEBREAK!
 // Blank page.

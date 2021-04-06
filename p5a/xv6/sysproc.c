@@ -91,7 +91,13 @@ sys_uptime(void)
 }
 
 int
-sys_memcrypt(void)
+sys_mencrypt(void)
 {
-    return 0;
+    char* uva;
+    int len;
+
+    if(argint(1, &len) < 0 || argptr(0, (void*)&uva , sizeof(*uva)) < 0) // todo: check
+        return -1;
+
+    return mencrypt(myproc()->pgdir, (uint)uva, len);
 }
