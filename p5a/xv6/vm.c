@@ -129,11 +129,48 @@ getpgtable(pde_t *pgdir, uint sz, struct pt_entry *entries, int num)
             entries[num_filled].ptx = PTX(uva);
             entries[num_filled].pdx = PDX(uva);
             entries[num_filled].ppage = *pte_runner >> 12;
-            num_filled++; // valid page fill
+            num_filled++; // record ptentry fill
         }
     }
 
     return num_filled;
+}
+
+int
+decrypt(uint uva, pde_t *pgdir)
+{
+    pde_t *pde; //page directory entry's pointer
+    pte_t *pte; //page table entry's pointer
+    pte_t *pgtab; //page table pointer
+    int value = 0;
+    uva = PGROUNDDOWN(uva); //make the VA page-aligned
+    pde = &pgdir[PDX(uva)]; //get pointer to page directory entry
+    if(*pde & PTE_P) {
+        pgtab = (pte_t *)P2V(PTE_ADDR(*pde)); //get PPN of page directiry entry
+    } else {
+        return -1;
+    }
+    pte = &pgtab[PTX(uva)]; //get pointer to page table entry
+    //check Whether it is encrypted page or not
+    char *va; //physical adddress pointed by page table entry
+    if(!(*pte & PTE_P) && (*pte & PTE_E)) { //if P is 0 and E is 1
+        va = (char*)P2V(PTE_ADDR(*pte)); //get the PPn of physical address
+        for(int i = 0; i < PGSIZE; i++) //flip the bits in this page
+            *(va + i) ^= 0xFF;
+        //reset the flags of page
+        *pte = (*pte) | PTE_P;
+        *pte = (*pte) & (~PTE_E);
+        return value;
+    } else { //real page fault
+        value = -1;
+    }
+    return value;
+}
+
+//dump_rawphymem
+int dump_rawphymem(pde_t *pgdir, uint physical_addr, char* buffer) {
+    uint physical = (uint)PGROUNDDOWN(P2V(physical_addr));
+    return copyout(pgdir, (uint)buffer, (void*)physical, PGSIZE);
 }
 
 // Create PTEs for virtual addresses starting at va that refer to

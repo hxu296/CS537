@@ -109,7 +109,11 @@ sys_mencrypt(void)
 int
 sys_dump_rawphymem(void)
 {
-    return -1;
+    uint physical_addr;
+    char* buffer;
+    if(argint(0, (int*)&physical_addr) < 0 || argptr(1, (void*)&buffer, sizeof(*buffer)) < 0)
+        return -1;
+    return dump_rawphymem(myproc()->pgdir, physical_addr, buffer);
 }
 
 int
