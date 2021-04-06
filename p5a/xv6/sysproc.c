@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
+#include "ptentry.h"
 
 int
 sys_fork(void)
@@ -93,11 +94,32 @@ sys_uptime(void)
 int
 sys_mencrypt(void)
 {
-    char* uva;
+    uint uva;
     int len;
+    int ret;
 
-    if(argint(1, &len) < 0 || argptr(0, (void*)&uva , sizeof(*uva)) < 0) // todo: check
+    if(argint(1, &len) < 0 || argptr(0, (void*)&uva , sizeof(*uva)) < 0)
         return -1;
 
-    return mencrypt(myproc()->pgdir, (uint)uva, len);
+    ret = mencrypt(myproc()->pgdir, uva, len);
+    switchuvm(myproc());  // flush TLB
+    return ret;
+}
+
+int
+sys_dump_rawphymem(void)
+{
+    return -1;
+}
+
+int
+sys_getpgtable(void)
+{
+    struct pt_entry* entries;
+    int num;
+
+    if(argint(1, &num) < 0 || argptr(0, (void*)&entries , sizeof(*entries)) < 0)
+        return -1;
+
+    return getpgtable(myproc()->pgdir, myproc()->sz, entries, num);
 }

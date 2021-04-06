@@ -6,6 +6,7 @@
 #include "mmu.h"
 #include "proc.h"
 #include "elf.h"
+#include "ptentry.h"
 
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
@@ -104,10 +105,34 @@ mencrypt(pde_t *pgdir, unit uva, int len)
         pte_runner = pte_runner & (~PTE_P);
     }
 
-    // flush TLB
-    switchuvm(myproc());
-
     return 0;
+}
+
+int
+getpgtable(pde_t *pgdir, uint sz, struct pt_entry *entries, int num)
+{
+    // sanity check
+    if(entries == 0)
+        return -1;
+
+    pte_t *pte_runner;
+    uint uva = sz;
+    int num_filled;
+
+    for(num_filled = 0; (pte_runner = walkpgdir(pgdir, uva, 0)) != 0 && num_filled < num; num_filled++){
+        if((pte_runner & PTE_P) ^ (pte_runner & PTE_E)){
+            entries[num_filled].encrypted = pte_runner & PTE_E;
+            entries[num_filled].writable = pte_runner & PTE_W;
+            entries[num_filled].present = pte_runner & PTE_P;
+            entries[num_filled].ptx = PTX(uva);
+            entries[num_filled].pdx = PDX(uva);
+            entries[num_filled].ppage = PTE_ADDR(pte_runner);
+            if((uva = PGROUNDDOWN(uva)) == 0) break;
+            uva -= 1;
+        } else break;
+    }
+
+    return num_filled;
 }
 
 // Create PTEs for virtual addresses starting at va that refer to
