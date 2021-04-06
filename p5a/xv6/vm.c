@@ -57,7 +57,7 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
 }
 
 int
-mencrypt(pde_t *pgdir, unit uva, int len)
+mencrypt(pde_t *pgdir, uint uva, int len)
 {
     // todo: what if uva is page-aligned?
     // make sure uva and len are in reasonable range
@@ -79,14 +79,14 @@ mencrypt(pde_t *pgdir, unit uva, int len)
             return -1;
         }
         pte = &pgtab[PTX(uva)];
-        // make sure the page hamission. It is an user page and it is present
-        if (*pte & PTE_W && *pte & PTE_U && (*pte & PTE_P ^ (*pte & PTE_E))){
+        // make sure the page has write permission. It is an user page and it is present
+        if (*pte & PTE_W && *pte & PTE_U && ((*pte & PTE_P) ^ (*pte & PTE_E))){
             pte_arr[i] = pte;
         } else{
             return -1;
         }
 
-        uva = PGROUNDUP(uva) // move to the next page
+        uva = PGROUNDUP(uva); // move to the next page
     }
 
     // encrypt pages in ka_arr
@@ -101,8 +101,8 @@ mencrypt(pde_t *pgdir, unit uva, int len)
         for (j = 0; j < PGSIZE; j++) // flip all bits in this page
             *(ka + j) ^= 0xFF;
         // set encrypted to 1, set present to 0
-        pte_runner = pte_runner | PTE_E;
-        pte_runner = pte_runner & (~PTE_P);
+        *pte_runner = *pte_runner | PTE_E;
+        *pte_runner = *pte_runner & (~PTE_P);
     }
 
     return 0;
@@ -119,16 +119,15 @@ getpgtable(pde_t *pgdir, uint sz, struct pt_entry *entries, int num)
     uint uva = sz;
     int num_filled;
 
-    for(num_filled = 0; (pte_runner = walkpgdir(pgdir, uva, 0)) != 0 && num_filled < num; num_filled++){
-        if((pte_runner & PTE_P) ^ (pte_runner & PTE_E)){
-            entries[num_filled].encrypted = pte_runner & PTE_E;
-            entries[num_filled].writable = pte_runner & PTE_W;
-            entries[num_filled].present = pte_runner & PTE_P;
+    for(num_filled = 0; (pte_runner = walkpgdir(pgdir, (const void*)(uva), 0)) != 0 && num_filled < num; num_filled++){
+        if((*pte_runner & PTE_P) ^ (*pte_runner & PTE_E)){
+            entries[num_filled].encrypted = *pte_runner & PTE_E;
+            entries[num_filled].writable = *pte_runner & PTE_W;
+            entries[num_filled].present = *pte_runner & PTE_P;
             entries[num_filled].ptx = PTX(uva);
             entries[num_filled].pdx = PDX(uva);
-            entries[num_filled].ppage = PTE_ADDR(pte_runner);
-            if((uva = PGROUNDDOWN(uva)) == 0) break;
-            uva -= 1;
+            entries[num_filled].ppage = PTE_ADDR(*pte_runner);
+            if((uva -= PGSIZE) == 0) break;
         } else break;
     }
 
