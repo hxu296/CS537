@@ -59,7 +59,6 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
 int
 mencrypt(pde_t *pgdir, uint uva, int len)
 {
-    // todo: what if uva is page-aligned?
     // make sure uva and len are in reasonable range
     if(len < 0 || uva + PGSIZE * len > KERNBASE)
         return -1;
@@ -86,7 +85,7 @@ mencrypt(pde_t *pgdir, uint uva, int len)
             return -1;
         }
 
-        uva = PGROUNDUP(uva); // move to the next page
+        uva += PGSIZE; // move to the next page
     }
 
     // encrypt pages in ka_arr
@@ -95,8 +94,8 @@ mencrypt(pde_t *pgdir, uint uva, int len)
 
     for(i = 0; i < len; i++)
     {
-        if(*pte & PTE_E) continue;  // already encrypted, skip
         pte_runner = pte_arr[i];
+        if(*pte_runner & PTE_E) continue;  // already encrypted, skip
         ka = (char*) P2V(PTE_ADDR(*pte_runner));  // this is lowest kernel address of the page
         for (j = 0; j < PGSIZE; j++) // flip all bits in this page
             *(ka + j) ^= 0xFF;
@@ -113,22 +112,25 @@ getpgtable(pde_t *pgdir, uint sz, struct pt_entry *entries, int num)
 {
     // sanity check
     if(entries == 0)
-        return -1;
+        return 0;
 
+    // going from 0 to sz
+    if(sz/PGSIZE < num) num = sz/PGSIZE;
     pte_t *pte_runner;
-    uint uva = sz;
-    int num_filled;
+    uint uva = 0;
+    int num_filled = 0;
 
-    for(num_filled = 0; (pte_runner = walkpgdir(pgdir, (const void*)(uva), 0)) != 0 && num_filled < num; num_filled++){
-        if((*pte_runner & PTE_P) ^ (*pte_runner & PTE_E)){
-            entries[num_filled].encrypted = *pte_runner & PTE_E;
-            entries[num_filled].writable = *pte_runner & PTE_W;
-            entries[num_filled].present = *pte_runner & PTE_P;
+    for(uva = 0; uva <= sz; uva += PGSIZE){
+        if((pte_runner = walkpgdir(pgdir, (const void*)(uva), 0)) != 0 && ((*pte_runner & PTE_P) ^ (*pte_runner & PTE_E)) && *pte_runner & PTE_U){
+            // retrieving info from valid page
+            entries[num_filled].encrypted = *pte_runner & PTE_E ? 1 : 0;
+            entries[num_filled].writable = *pte_runner & PTE_W ? 1 : 0;
+            entries[num_filled].present = *pte_runner & PTE_P ? 1 : 0;
             entries[num_filled].ptx = PTX(uva);
             entries[num_filled].pdx = PDX(uva);
-            entries[num_filled].ppage = PTE_ADDR(*pte_runner);
-            if((uva -= PGSIZE) == 0) break;
-        } else break;
+            entries[num_filled].ppage = *pte_runner >> 12;
+            num_filled++; // valid page fill
+        }
     }
 
     return num_filled;
@@ -148,7 +150,7 @@ mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
   for(;;){
     if((pte = walkpgdir(pgdir, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_P)
+    if(*pte & PTE_P || *pte & PTE_E)
       panic("remap");
     *pte = pa | perm | PTE_P;
     if(a == last)
@@ -346,7 +348,7 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
     pte = walkpgdir(pgdir, (char*)a, 0);
     if(!pte)
       a = PGADDR(PDX(a) + 1, 0, 0) - PGSIZE;
-    else if((*pte & PTE_P) != 0){
+    else if(((*pte & PTE_P) ^ (*pte & PTE_E)) != 0){
       pa = PTE_ADDR(*pte);
       if(pa == 0)
         panic("kfree");
@@ -405,7 +407,7 @@ copyuvm(pde_t *pgdir, uint sz)
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
-    if(!(*pte & PTE_P))
+    if(!((*pte & PTE_P) ^ (*pte & PTE_E)))
       panic("copyuvm: page not present");
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
@@ -432,7 +434,7 @@ uva2ka(pde_t *pgdir, char *uva)
   pte_t *pte;
 
   pte = walkpgdir(pgdir, uva, 0);
-  if((*pte & PTE_P) == 0)
+  if(((*pte & PTE_P) ^ (*pte & PTE_E)) == 0)
     return 0;
   if((*pte & PTE_U) == 0)
     return 0;
