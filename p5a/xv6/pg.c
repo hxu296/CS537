@@ -3,6 +3,9 @@
 #include "user.h"
 #include "ptentry.h"
 
+#define KERNBASE 0x80000000
+#define PGSIZE 4096
+
 void
 printpginfo(struct pt_entry *entries, int len){
     printf(1, "getpginfo.c: len: %d\n", len);
@@ -15,7 +18,9 @@ printpginfo(struct pt_entry *entries, int len){
 int
 main(void)
 {
-    char *ptr = sbrk(4096); // Allocate one page
+    char *ptr = sbrk(PGSIZE); // Allocate one page
+    printf(1, "ret: %d\n", mencrypt((char*)KERNBASE, 0));
+
     if(mencrypt(ptr, 1) == -1) {
         printf(2, "memcrypt failed\n");
         exit();

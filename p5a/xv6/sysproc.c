@@ -98,7 +98,13 @@ sys_mencrypt(void)
     int len;
     int ret;
 
-    if(argint(1, &len) < 0 || argptr(0, (void*)&uva , sizeof(uva)) < 0)
+    if(argint(1, &len) < 0)
+        return -1;
+
+    if(len == 0)
+        return 0;
+
+    if (argptr(0, (void*)&uva , sizeof(uva)) < 0)
         return -1;
 
     ret = mencrypt(myproc()->pgdir, uva, len);

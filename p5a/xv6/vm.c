@@ -60,7 +60,7 @@ int
 mencrypt(pde_t *pgdir, uint uva, int len)
 {
     // make sure uva and len are in reasonable range
-    if(len < 0 || uva + PGSIZE * len > KERNBASE)
+    if(len < 0 || uva > KERNBASE || uva + PGSIZE * len > KERNBASE)
         return -1;
 
     // make sure pages in range have right permissions
@@ -117,10 +117,10 @@ getpgtable(pde_t *pgdir, uint sz, struct pt_entry *entries, int num)
     // going from 0 to sz
     if(sz/PGSIZE < num) num = sz/PGSIZE;
     pte_t *pte_runner;
-    uint uva = 0;
+    uint uva;
     int num_filled = 0;
 
-    for(uva = 0; uva <= sz; uva += PGSIZE){
+    for(uva = sz; uva > 0 && num_filled < num; uva -= PGSIZE){
         if((pte_runner = walkpgdir(pgdir, (const void*)(uva), 0)) != 0 && ((*pte_runner & PTE_P) ^ (*pte_runner & PTE_E)) && *pte_runner & PTE_U){
             // retrieving info from valid page
             entries[num_filled].encrypted = *pte_runner & PTE_E ? 1 : 0;
@@ -169,7 +169,7 @@ decrypt(uint uva, pde_t *pgdir)
 
 //dump_rawphymem
 int dump_rawphymem(pde_t *pgdir, uint physical_addr, char* buffer) {
-    uint physical = (uint)PGROUNDDOWN(P2V(physical_addr));
+    uint physical = PGROUNDDOWN((uint)P2V(physical_addr));
     return copyout(pgdir, (uint)buffer, (void*)physical, PGSIZE);
 }
 

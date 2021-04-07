@@ -188,6 +188,9 @@ int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
 int             mencrypt(pde_t*, uint, int);
 int             getpgtable(pde_t*, uint, struct pt_entry*, int);
+int             decrypt(uint, pde_t*);
+int             dump_rawphymem(pde_t*, uint, char*);
+
 
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
