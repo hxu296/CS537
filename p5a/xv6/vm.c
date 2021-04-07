@@ -59,50 +59,49 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
 int
 mencrypt(pde_t *pgdir, uint uva, int len)
 {
-    //cprintf("in memcrypt\n");
     // make sure uva and len are in reasonable range
-    if(len < 0 || uva > KERNBASE || uva + PGSIZE * len > KERNBASE)
+    if(len < 0 || uva > KERNBASE || uva + PGSIZE * len > KERNBASE) {
         return -1;
+    }
 
     // make sure pages in range have right permissions
     pde_t *pde;
     pte_t *pte;
     pte_t *pgtab;
-    pte_t *pte_arr[len];
+    uint temp_uva = uva;
     int i, j;
 
     for(i = 0; i < len; i++) {
-        pde = &pgdir[PDX(uva)];
+        pde = &pgdir[PDX(temp_uva)];
         if (*pde & PTE_P) {
             pgtab = (pte_t *) P2V(PTE_ADDR(*pde));
         } else {
             return -1;
         }
-        pte = &pgtab[PTX(uva)];
+        pte = &pgtab[PTX(temp_uva)];
         // make sure the page has write permission. It is an user page and it is present
-        if (*pte & PTE_W && *pte & PTE_U && ((*pte & PTE_P) ^ (*pte & PTE_E))){
-            pte_arr[i] = pte;
-        } else{
-            return -1;
+        if (!((*pte & PTE_W) && (*pte & PTE_U) && ((*pte & PTE_P) ^ (*pte & PTE_E)))){
+            return -1; 
         }
-
-        uva += PGSIZE; // move to the next page
+        temp_uva += PGSIZE; // move to the next page
     }
-
-    // encrypt pages in ka_arr
-    pte_t * pte_runner;
+    
+    temp_uva = uva;
     char *ka; // runner
 
     for(i = 0; i < len; i++)
     {
-        pte_runner = pte_arr[i];
-        if(*pte_runner & PTE_E) continue;  // already encrypted, skip
-        ka = (char*) P2V(PTE_ADDR(*pte_runner));  // this is lowest kernel address of the page
+        pde = &pgdir[PDX(temp_uva)];
+        pgtab = (pte_t *) P2V(PTE_ADDR(*pde));
+        pte = &pgtab[PTX(temp_uva)];
+        if(*pte & PTE_E) continue;  // already encrypted, skip
+        ka = (char*) P2V(PTE_ADDR(*pte));  // this is lowest kernel address of the page
         for (j = 0; j < PGSIZE; j++) // flip all bits in this page
             *(ka + j) ^= 0xFF;
         // set encrypted to 1, set present to 0
-        *pte_runner = *pte_runner | PTE_E;
-        *pte_runner = *pte_runner & (~PTE_P);
+        *pte = *pte | PTE_E;
+        *pte = *pte & (~PTE_P);
+        temp_uva += PGSIZE;
     }
 
     return 0;
@@ -140,7 +139,6 @@ getpgtable(pde_t *pgdir, uint sz, struct pt_entry *entries, int num)
 int
 decrypt(uint uva, pde_t *pgdir)
 {
-    cprintf("in decrypt\n");
     pde_t *pde; //page directory entry's pointer
     pte_t *pte; //page table entry's pointer
     pte_t *pgtab; //page table pointer
@@ -149,7 +147,7 @@ decrypt(uint uva, pde_t *pgdir)
     if(*pde & PTE_P) {
         pgtab = (pte_t *)P2V(PTE_ADDR(*pde)); //get PPN of page directiry entry
     } else {
-        return -1; // exit from trap
+        return 0;
     }
     pte = &pgtab[PTX(uva)]; //get pointer to page table entry
     //check Whether it is encrypted page or not
@@ -163,7 +161,6 @@ decrypt(uint uva, pde_t *pgdir)
         *pte = (*pte) & (~PTE_E);
         return 0;
     } else { //real page fault
-        cprintf("not an encrypted page\n");
         return -1;
     }
 }

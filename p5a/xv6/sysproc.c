@@ -109,6 +109,7 @@ sys_mencrypt(void)
 
     ret = mencrypt(myproc()->pgdir, uva, len);
     switchuvm(myproc());  // flush TLB
+    cprintf("returned from proc.c\n");
     return ret;
 }
 
