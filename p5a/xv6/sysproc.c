@@ -130,7 +130,7 @@ sys_getpgtable(void)
     int num;
 
     if(argint(1, &num) < 0 || argptr(0, (void*)&entries , sizeof(*entries)) < 0)
-        return 0;
+        return -1;
 
     return getpgtable(myproc()->pgdir, myproc()->sz, entries, num);
 }

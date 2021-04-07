@@ -112,6 +112,9 @@ getpgtable(pde_t *pgdir, uint sz, struct pt_entry *entries, int num)
 {
     // sanity check
     if(entries == 0)
+        return -1;
+
+    if(num < 0)
         return 0;
 
     // going from 0 to sz
