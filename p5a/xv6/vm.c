@@ -59,6 +59,7 @@ walkpgdir(pde_t *pgdir, const void *va, int alloc)
 int
 mencrypt(pde_t *pgdir, uint uva, int len)
 {
+    //cprintf("in memcrypt\n");
     // make sure uva and len are in reasonable range
     if(len < 0 || uva > KERNBASE || uva + PGSIZE * len > KERNBASE)
         return -1;
@@ -139,16 +140,16 @@ getpgtable(pde_t *pgdir, uint sz, struct pt_entry *entries, int num)
 int
 decrypt(uint uva, pde_t *pgdir)
 {
+    cprintf("in decrypt\n");
     pde_t *pde; //page directory entry's pointer
     pte_t *pte; //page table entry's pointer
     pte_t *pgtab; //page table pointer
-    int value = 0;
     uva = PGROUNDDOWN(uva); //make the VA page-aligned
     pde = &pgdir[PDX(uva)]; //get pointer to page directory entry
     if(*pde & PTE_P) {
         pgtab = (pte_t *)P2V(PTE_ADDR(*pde)); //get PPN of page directiry entry
     } else {
-        return -1;
+        return -1; // exit from trap
     }
     pte = &pgtab[PTX(uva)]; //get pointer to page table entry
     //check Whether it is encrypted page or not
@@ -160,11 +161,11 @@ decrypt(uint uva, pde_t *pgdir)
         //reset the flags of page
         *pte = (*pte) | PTE_P;
         *pte = (*pte) & (~PTE_E);
-        return value;
+        return 0;
     } else { //real page fault
-        value = -1;
+        cprintf("not an encrypted page\n");
+        return -1;
     }
-    return value;
 }
 
 //dump_rawphymem
@@ -189,7 +190,11 @@ mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
       return -1;
     if(*pte & PTE_P || *pte & PTE_E)
       panic("remap");
-    *pte = pa | perm | PTE_P;
+    if(perm & PTE_E) {
+        *pte = pa | perm;
+    } else {
+        *pte = pa | perm | PTE_P;
+    }
     if(a == last)
       break;
     a += PGSIZE;

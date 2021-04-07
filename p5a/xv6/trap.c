@@ -77,12 +77,12 @@ trap(struct trapframe *tf)
             cpuid(), tf->cs, tf->eip);
     lapiceoi();
     break;
-  //addd the case for page fault
+  //add the case for page fault
   case T_PGFLT:
       if(decrypt((uint)rcr2(), myproc()->pgdir) == 0)
-          break;
-
-
+          return;
+      else
+          exit();
           //PAGEBREAK: 13
   default:
     if(myproc() == 0 || (tf->cs&3) == 0){
