@@ -88,6 +88,12 @@ allocproc(void)
 found:
   p->state = EMBRYO;
   p->pid = nextpid++;
+  
+  //Allocate initial workset queue
+  p->ws_queue->head = 0;
+  p->ws_queue->tail = 0;
+  p->ws_queue->full = 0;
+  p->ws_queue->empty = 1;
 
   release(&ptable.lock);
 
@@ -101,6 +107,8 @@ found:
   // Leave room for trap frame.
   sp -= sizeof *p->tf;
   p->tf = (struct trapframe*)sp;
+
+ 
 
   // Set up new context to start executing at forkret,
   // which returns to trapret.
@@ -199,6 +207,8 @@ fork(void)
   np->sz = curproc->sz;
   np->parent = curproc;
   *np->tf = *curproc->tf;
+
+  //TODO: Copy ws_queue from old process to child
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;

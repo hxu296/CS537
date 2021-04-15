@@ -34,6 +34,15 @@ struct context {
 
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
+struct ws_queue {
+  pte_t* queue[CLOCKSIZE];
+  int head;
+  int tail;
+  int full;
+  int size;
+  int empty;
+}
+
 // Per-process state
 struct proc {
   uint sz;                     // Size of process memory (bytes)
@@ -44,6 +53,7 @@ struct proc {
   struct proc *parent;         // Parent process
   struct trapframe *tf;        // Trap frame for current syscall
   struct context *context;     // swtch() here to run process
+  struct ws_queue *ws_queue;   // Queue for holding the working set of unencrypted pages
   void *chan;                  // If non-zero, sleeping on chan
   int killed;                  // If non-zero, have been killed
   struct file *ofile[NOFILE];  // Open files
