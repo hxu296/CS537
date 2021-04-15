@@ -41,7 +41,7 @@ struct ws_queue {
   int full;
   int size;
   int empty;
-}
+};
 
 // Per-process state
 struct proc {

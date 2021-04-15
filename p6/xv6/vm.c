@@ -387,12 +387,13 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 
 /************************************P6 Methods***********************/
 
-//Inserts a new PTE into Queue
+//Inserts a new PTE into Queue, haven't figured out relavent return codes yet
 int
 ws_enqueue(struct ws_queue *queue, pte_t *new_pte)
 {
   if(queue->full == 1) {
     //evict here
+    return 0;
   }
 
   queue->queue[queue->head] = new_pte;
@@ -407,6 +408,7 @@ ws_enqueue(struct ws_queue *queue, pte_t *new_pte)
     queue->empty = 0;
   }
 
+return 0;
 }
 
 //returns 0 on successful removal, or if the queue is already empty.
@@ -420,11 +422,11 @@ ws_dequeue(struct ws_queue *queue, pte_t *old_pte) {
   for(int i = 0; i<CLOCKSIZE; i++) {
     if(queue->queue[i] == old_pte) {
       for(int j = i; j != queue->tail; j = (j+CLOCKSIZE-1)%CLOCKSIZE) {
-        queue->queue[j] = queue->queue[(j+CLOCKSIZE-1)%CLOCKSIZE)]; 
+        queue->queue[j] = queue->queue[(j+CLOCKSIZE-1)%CLOCKSIZE]; 
       }
       queue->tail++;
       if(queue->full == 1) {
-        queue->full == 0;
+        queue->full = 0;
       }
       if(queue->head == queue->tail) {
         queue->empty = 1;
