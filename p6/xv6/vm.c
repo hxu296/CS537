@@ -436,6 +436,69 @@ ws_dequeue(struct ws_queue *queue, pte_t *old_pte) {
   return 1;
 }
 
+// encrypt the target page.
+// no sanity check in mencrypt. Assume pte permissions are correct and the page is not encrypted. This is safe because
+// mencrypt is called only within kernel.
+void
+mencrypt(pte_t *pte)
+{
+    // flip all bits in this page.
+    char *kva = (char*) P2V(PTE_ADDR(*pte));
+    for (int offset = 0; offset < PGSIZE; offset++)
+        *(kva + offset) ^= 0xFF;
+
+    // set encrypted to 1, set present to 0.
+    *pte = *pte | PTE_E;
+    *pte = *pte & (~PTE_P);
+}
+
+// helper method for mdecrypt.
+// here we implement the clock algorithm to find and evict a victim page.
+void
+clock_evict(struct ws_queue *queue){
+    // find victim page.
+    while(queue->head & PTE_A) {
+        *(queue->head) = *(queue->head) & ~PTE_A;  // if ref bit is set, clear the ref bit
+        ws_enqueue(queue, ws_dequeue(queue));  // put head to tail
+    }
+    // victim page is queue->head, dequeue the victim page.
+    pte_t *victim = ws_dequeue(queue);
+    // encrypt the victim page before letting it go.
+    mencrypt(victim);
+}
+
+// decrypt will be called in trap.c when we encounter a page fault.
+// it will decrypt the page that uva belongs to and add its pte to the process's ws_queue.
+int
+mdecrypt(uint uva, pde_t *pgdir, struct ws_queue *queue)
+{
+    // decrypt the page that uva belongs to.
+    if(uva >= KERNBASE) // sanity check.
+        return -1;
+    pte_t *pte = walkpgdir(pgdir, (void*) uva, 0);
+    // filter out real page fault.
+    if(!pte || (*pte == 0) || !(*pte & PTE_E))
+        return -1;
+    // start decryption, flip all bits in this page.
+    char *kva = (char*)P2V(PTE_ADDR(*pte));
+    for(int offset = 0; offset < PGSIZE; offset++)
+        *(kva + offset) ^= 0xFF;
+    // reset pte flags.
+    *pte = (*pte) | PTE_P;
+    *pte = (*pte) & (~PTE_E);
+
+    // add pte to process's ws_queue using the clock algorithm.
+    if(queue->full){
+        // queue is full. Find and evict a victim page.
+        clock_evict(queue);
+    }
+    // at this stage, queue should have some free space left. Enqueue pte.
+    ws_enqueue(queue, pte); // TODO: add error checking
+
+    return 0;
+}
+
+
 
 //PAGEBREAK!
 // Blank page.
