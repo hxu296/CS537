@@ -35,11 +35,13 @@ struct context {
 enum procstate { UNUSED, EMBRYO, SLEEPING, RUNNABLE, RUNNING, ZOMBIE };
 
 struct ws_queue {
-  pte_t* queue[CLOCKSIZE];
-  int head;
-  int tail;
-  int full;
+  pte_t* pte_buffer[CLOCKSIZE];
+  pte_t* head;
+  pte_t* tail;
+  int head_index;
+  int tail_index;
   int size;
+  int full;
   int empty;
 };
 

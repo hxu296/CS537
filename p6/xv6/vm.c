@@ -387,42 +387,59 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 
 /************************************P6 Methods***********************/
 
-//Inserts a new PTE into Queue, haven't figured out relavent return codes yet
-int
+// insert new_pte to queue. Assume queue is not full.
+void
 ws_enqueue(struct ws_queue *queue, pte_t *new_pte)
 {
-  if(queue->full == 1) {
-    //evict here
-    return 0;
-  }
-
-  queue->queue[queue->head] = new_pte;
-
-  queue->head = (queue->head+1) % CLOCKSIZE;
-  queue->size++;
-
-  if(queue->head == queue->tail) {
-    queue->full = 1;
+    if(queue->empty){
+        (queue->pte_buffer)[queue->tail_index] = new_pte;
+        queue->head = queue->tail = new_pte;
+        queue->empty = 0;
+    } else {
+        int new_tail_index = (queue->tail_index + 1) % CLOCKSIZE; // new_tail should be right next to the old tail.
+        (queue->pte_buffer)[new_tail_index] = new_pte; // insert new page at index new_tail_index.
+        queue->tail_index = new_tail_index;
+        queue->tail = new_pte;
     }
-  if(queue->empty == 1) {
-    queue->empty = 0;
-  }
 
-return 0;
+    queue->size++;
+    queue->full = queue->size == CLOCKSIZE;
 }
 
+// pop the head of the queue. Assume queue is not empty.
+// return the popped pte.
+pte_t*
+ws_dequeue(struct ws_queue *queue){
+    pte_t* old_head;
+
+    old_head = queue->head;
+    (queue->pte_buffer)[queue->head_index] = 0;
+
+    if(queue->head == queue->tail){
+        queue->head = queue->tail = 0;
+        queue->empty = 1;
+    } else{
+        int new_head_index = (queue->head_index + 1) % CLOCKSIZE;
+        queue->head_index = new_head_index;
+        queue->head = (queue->pte_buffer)[new_head_index];
+    }
+
+    queue->size++;
+    queue->full = queue->size == CLOCKSIZE;
+
+    return old_head;
+}
+
+/**
 //returns 0 on successful removal, or if the queue is already empty.
 //returns 1 if the PTE was not found in the queue.
-int 
+int
 ws_dequeue(struct ws_queue *queue, pte_t *old_pte) {
-  if(queue->empty == 1) {
-    return 0;
-  }
 
   for(int i = 0; i<CLOCKSIZE; i++) {
     if(queue->queue[i] == old_pte) {
       for(int j = i; j != queue->tail; j = (j+CLOCKSIZE-1)%CLOCKSIZE) {
-        queue->queue[j] = queue->queue[(j+CLOCKSIZE-1)%CLOCKSIZE]; 
+        queue->queue[j] = queue->queue[(j+CLOCKSIZE-1)%CLOCKSIZE];
       }
       queue->tail++;
       if(queue->full == 1) {
@@ -435,6 +452,7 @@ ws_dequeue(struct ws_queue *queue, pte_t *old_pte) {
   }
   return 1;
 }
+**/
 
 // encrypt the target page.
 // no sanity check in mencrypt. Assume pte permissions are correct and the page is not encrypted. This is safe because
@@ -457,14 +475,14 @@ mencrypt(pte_t *pte)
 void
 clock_evict(struct ws_queue *queue){
     // find victim page.
-    while(queue->head & PTE_A) {
-        *(queue->head) = *(queue->head) & ~PTE_A;  // if ref bit is set, clear the ref bit
-        ws_enqueue(queue, ws_dequeue(queue));  // put head to tail
+    while((*(queue->head) & PTE_A) && (*(queue->head) & PTE_P)) {
+        *(queue->head) = *(queue->head) & ~PTE_A;  // if ref bit is set, clear the ref bit.
+        ws_enqueue(queue, ws_dequeue(queue));  // put head to tail.
     }
     // victim page is queue->head, dequeue the victim page.
     pte_t *victim = ws_dequeue(queue);
     // encrypt the victim page before letting it go.
-    mencrypt(victim);
+    if(*victim & PTE_P) mencrypt(victim);
 }
 
 // decrypt will be called in trap.c when we encounter a page fault.
