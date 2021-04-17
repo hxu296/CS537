@@ -468,6 +468,9 @@ mencrypt(pte_t *pte)
     // set encrypted to 1, set present to 0.
     *pte = *pte | PTE_E;
     *pte = *pte & (~PTE_P);
+
+    // flush TLB
+    switchuvm(myproc());
 }
 
 // helper method for mdecrypt.
@@ -488,8 +491,12 @@ clock_evict(struct ws_queue *queue){
 // decrypt will be called in trap.c when we encounter a page fault.
 // it will decrypt the page that uva belongs to and add its pte to the process's ws_queue.
 int
-mdecrypt(uint uva, pde_t *pgdir, struct ws_queue *queue)
+mdecrypt(uint uva)
 {
+    struct proc * p = myproc();
+    pde_t *pgdir = p->pgdir;
+    struct ws_queue *queue = p->ws_queue;
+
     // decrypt the page that uva belongs to.
     if(uva >= KERNBASE) // sanity check.
         return -1;

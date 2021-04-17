@@ -78,7 +78,7 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
   case T_PGFLT:
-      if(mdecrypt((uint)rcr2(), myproc()->pgdir, myproc()->ws_queue) == 0)
+      if(mdecrypt((uint)rcr2()) == 0)
           return;
       exit();
 
