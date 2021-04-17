@@ -89,11 +89,9 @@ found:
   p->state = EMBRYO;
   p->pid = nextpid++;
 
-  // //Allocate initial workset queue
-  // p->ws_queue->head = 0;
-  // p->ws_queue->tail = 0;
-  // p->ws_queue->full = 0;
-  // p->ws_queue->empty = 1;
+  // Allocate initial workset queue
+  p->ws_queue = (const struct ws_queue){0}; // initialize all bits in struct to 0.
+  p->ws_queue.empty = 1; // overwrite empty to 1.
 
   release(&ptable.lock);
   

@@ -55,7 +55,7 @@ struct proc {
   struct proc *parent;         // Parent process
   struct trapframe *tf;        // Trap frame for current syscall
   struct context *context;     // swtch() here to run process
-  struct ws_queue *ws_queue;   // Queue for holding the working set of unencrypted pages
+  struct ws_queue ws_queue;   // Queue for holding the working set of unencrypted pages
   void *chan;                  // If non-zero, sleeping on chan
   int killed;                  // If non-zero, have been killed
   struct file *ofile[NOFILE];  // Open files
