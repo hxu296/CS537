@@ -99,6 +99,10 @@ exec(char *path, char **argv)
   curproc->sz = sz;
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
+  // encrypt from 0 to sz.
+  for(uint uva = 0; uva <= sz; uva += PGSIZE){
+      mencrypt(uva);
+  }
   switchuvm(curproc);
   freevm(oldpgdir);
   return 0;

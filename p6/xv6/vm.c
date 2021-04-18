@@ -68,9 +68,13 @@ mappages(pde_t *pgdir, void *va, uint size, uint pa, int perm)
   for(;;){
     if((pte = walkpgdir(pgdir, a, 1)) == 0)
       return -1;
-    if(*pte & PTE_P)
+    if(*pte & PTE_P || *pte & PTE_E)
       panic("remap");
-    *pte = pa | perm | PTE_P;
+    if(perm & PTE_E) {
+      *pte = pa | perm;
+    } else {
+      *pte = pa | perm | PTE_P;
+    }
     if(a == last)
       break;
     a += PGSIZE;
@@ -325,7 +329,7 @@ copyuvm(pde_t *pgdir, uint sz)
   for(i = 0; i < sz; i += PGSIZE){
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
-    if(!(*pte & PTE_P))
+    if(!((*pte & PTE_P) ^ (*pte & PTE_E)))
       panic("copyuvm: page not present");
     pa = PTE_ADDR(*pte);
     flags = PTE_FLAGS(*pte);
@@ -424,15 +428,80 @@ ws_dequeue(struct ws_queue queue){
         queue.head = (queue.pte_buffer)[new_head_index];
     }
 
-    queue.size++;
+    queue.size--;
     queue.full = queue.size == CLOCKSIZE;
 
     return old_head;
 }
 
+// remove the page that uva belongs to.
+// return 0 on success, -1 if old_pte is not in queue.
+// TODO: test this implementation.
+int
+ws_remove(struct ws_queue queue, pte_t *old_pte){
+    if(old_pte == queue.head){
+        // this branch also takes care of old_pte == queue.head == queue.tail.
+        ws_dequeue(queue);
+        return 0;
+    }
+
+    // find buffer index of old_pte.
+    int pte_index = 0;
+    for(; pte_index < CLOCKSIZE; pte_index++)
+        if(queue.pte_buffer[pte_index] == old_pte)
+            break;
+
+    // return -1 if old_pte is not in queue.
+    if(pte_index == CLOCKSIZE)
+        return -1;
+
+    // old_pte found. Shift all entries from pte_index to tail_index to their left by 1.
+    for(int i = pte_index; i != queue.tail_index; i = (i + CLOCKSIZE + 1) % CLOCKSIZE)
+        queue.pte_buffer[i] = queue.pte_buffer[(i + CLOCKSIZE + 1) % CLOCKSIZE];
+
+    // update buffer, tail, and tail_index.
+    queue.pte_buffer[queue.tail_index] = 0;
+    queue.tail_index = (queue.tail_index + CLOCKSIZE - 1) % CLOCKSIZE;
+    queue.tail = queue.pte_buffer[queue.tail_index];
+
+    queue.size--;
+    queue.full = queue.size == CLOCKSIZE;
+
+    return 0;
+}
+
+// essentially a copy of deallocuvm, except we remove each deallocated page from ws_queue.
+int
+deallocte_and_remove(pde_t *pgdir, uint oldsz, uint newsz){
+
+    pte_t *pte;
+    uint a, pa;
+    struct ws_queue queue = myproc()->ws_queue;  // this is valid because deallocate_and_remove will only be called in growproc().
+
+    if(newsz >= oldsz)
+        return oldsz;
+
+    a = PGROUNDUP(newsz);
+    for(; a  < oldsz; a += PGSIZE){
+        pte = walkpgdir(pgdir, (char*)a, 0);
+        if(!pte)
+            a = PGADDR(PDX(a) + 1, 0, 0) - PGSIZE;
+        else if((*pte & PTE_P) != 0){
+            ws_remove(queue, pte);
+            pa = PTE_ADDR(*pte);
+            if(pa == 0)
+                panic("kfree");
+            char *v = P2V(pa);
+            kfree(v);
+            *pte = 0;
+        }
+    }
+    return newsz;
+}
+
 // encrypt the page described by pte.
 // no sanity check in mencrypt. Assume pte permissions are correct and the page is not encrypted. This is safe because
-// caller of mencrypt1 already did sanity check.
+// caller already did sanity check.
 void
 mencrypt1(pte_t *pte)
 {
@@ -450,14 +519,16 @@ mencrypt1(pte_t *pte)
 }
 
 // encrypt the page that uva belongs to.
-int mencrypt(uint uva){
+int
+mencrypt(uint uva){
     pde_t *pgdir = myproc()->pgdir;
     if(uva >= KERNBASE)
         return -1;
     pte_t *pte = walkpgdir(pgdir, (void*) uva, 0);
-    if(!pte || (*pte == 0) || (*pte & PTE_E) || !(*pte & PTE_U))
+    if(!pte || (*pte == 0))
         return -1;
-    mencrypt1(pte);
+    if(!(*pte & PTE_E) && (*pte & PTE_U))
+        mencrypt1(pte);  // skip if page is already encrypted or not user page.
     return 0;
 }
 
@@ -466,7 +537,7 @@ int mencrypt(uint uva){
 void
 clock_evict(struct ws_queue queue){
     // find victim page.
-    while((*(queue.head) & PTE_A) && (*(queue.head) & PTE_P)) {
+    while(*(queue.head) & PTE_A) {
         *(queue.head) = *(queue.head) & ~PTE_A;  // if ref bit is set, clear the ref bit.
         ws_enqueue(queue, ws_dequeue(queue));  // put head to tail.
     }
@@ -506,7 +577,9 @@ mdecrypt(uint uva)
         clock_evict(queue);
     }
     // at this stage, queue should have some free space left. Enqueue pte.
-    ws_enqueue(queue, pte); // TODO: add error checking
+    ws_enqueue(queue, pte);
+
+    // TODO: add some debug utility.
 
     return 0;
 }

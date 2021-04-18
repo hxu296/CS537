@@ -164,18 +164,23 @@ userinit(void)
 int
 growproc(int n)
 {
-  uint sz;
+  uint oldsz, newsz;
   struct proc *curproc = myproc();
 
-  sz = curproc->sz;
+  oldsz = curproc->sz;
   if(n > 0){
-    if((sz = allocuvm(curproc->pgdir, sz, sz + n)) == 0)
+    if((newsz = allocuvm(curproc->pgdir, oldsz, oldsz + n)) == 0)
       return -1;
+    for(oldsz = PGROUNDUP(oldsz); oldsz <= newsz; oldsz+=PGSIZE) {
+        mencrypt(oldsz);
+    }
   } else if(n < 0){
-    if((sz = deallocuvm(curproc->pgdir, sz, sz + n)) == 0)
+    if((newsz = deallocte_and_remove(curproc->pgdir, oldsz, oldsz + n)) == 0)
       return -1;
   }
-  curproc->sz = sz;
+
+  curproc->sz = newsz;
+
   switchuvm(curproc);
   return 0;
 }
@@ -206,7 +211,8 @@ fork(void)
   np->parent = curproc;
   *np->tf = *curproc->tf;
 
-  //TODO: Copy ws_queue from old process to child
+  // Copy ws_queue from parent process to child
+  np->ws_queue = curproc->ws_queue;  // good thing we used circular array. Pretty straight forward here.
 
   // Clear %eax so that fork returns 0 in the child.
   np->tf->eax = 0;
