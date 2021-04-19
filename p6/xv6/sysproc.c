@@ -6,6 +6,7 @@
 #include "memlayout.h"
 #include "mmu.h"
 #include "proc.h"
+#include "ptentry.h"
 
 int
 sys_fork(void)
@@ -77,6 +78,8 @@ sys_sleep(void)
   return 0;
 }
 
+
+
 // return how many clock tick interrupts have occurred
 // since start.
 int
@@ -88,4 +91,26 @@ sys_uptime(void)
   xticks = ticks;
   release(&tickslock);
   return xticks;
+}
+
+int
+sys_dump_rawphymem(void)
+{
+    uint physical_addr;
+    char* buffer;
+    if(argint(0, (int*)&physical_addr) < 0 || argptr(1, (void*)&buffer, sizeof(*buffer)) < 0)
+        return -1;
+    return dump_rawphymem(physical_addr, buffer);
+}
+
+int
+sys_getpgtable(void)
+{
+    struct pt_entry* entries;
+    int num, wsetOnly;
+
+    if(argint(1, &num) < 0 || argint(2, &wsetOnly) < 0|| argptr(0, (void*)&entries , num*sizeof(struct pt_entry)) < 0)
+        return -1;
+
+    return getpgtable(entries, num, wsetOnly);
 }

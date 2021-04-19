@@ -96,6 +96,7 @@ struct segdesc {
 #define PTE_U           0x004   // User
 #define PTE_A           0x020   // Access Bit
 #define PTE_E           0x200   // Encrypted
+#define PTE_Q           0x400   // PTE is present in ws_queue
 #define PTE_PS          0x080   // Page Size
 
 // Address in page table or page directory entry

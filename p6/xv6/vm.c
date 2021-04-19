@@ -6,6 +6,7 @@
 #include "mmu.h"
 #include "proc.h"
 #include "elf.h"
+#include "ptentry.h"
 
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
@@ -408,6 +409,7 @@ ws_enqueue(struct ws_queue queue, pte_t *new_pte)
 
     queue.size++;
     queue.full = queue.size == CLOCKSIZE;
+    *new_pte |= PTE_Q;
 }
 
 // pop the head of the queue. Assume queue is not empty.
@@ -430,7 +432,7 @@ ws_dequeue(struct ws_queue queue){
 
     queue.size--;
     queue.full = queue.size == CLOCKSIZE;
-
+    *old_head &= ~PTE_Q;
     return old_head;
 }
 
@@ -582,6 +584,54 @@ mdecrypt(uint uva)
     // TODO: add some debug utility.
 
     return 0;
+}
+int 
+getpgtable(struct pt_entry* entries, int num, int wsetOnly) {
+if(wsetOnly != 1 && wsetOnly != 0) {
+  return -1;
+}
+
+
+int i = 0;
+pte_t *pte;
+
+
+//TODO: Test Checking on working set.
+
+
+for(int kva = PGROUNDDOWN(myproc()->sz-1); kva>=0; kva = kva - PGSIZE) { //minus 1- because size wouldn't round down to page bottom
+  pte = walkpgdir(myproc()->pgdir, (char*)kva, 0);
+  if(pte == 0) {
+    continue;
+  }
+  if(wsetOnly == 1 && ((*pte&PTE_Q) == 0)) { //PTE_Q is set upon enqueue and dequeue, so this bit should show working set status
+    continue;
+  }
+
+  entries[i].pdx = PDX(kva);
+  entries[i].ptx = PTX(kva);
+  entries[i].ppage = PTE_ADDR(*pte)>>12;
+  entries[i].writable = *pte & PTE_W ? 1 : 0;
+  entries[i].present = *pte & PTE_P ? 1 : 0;
+  entries[i].encrypted = *pte & PTE_E ? 1 : 0;
+  entries[i].ref = *pte & PTE_A ? 1 : 0;
+
+  i++;
+  if(i==num) {
+    break;
+  }
+}
+switchuvm(myproc());
+return i;
+}
+
+
+
+int
+dump_rawphymem(uint physical_addr, char* buffer) {
+    *buffer = *buffer;
+    uint physical = PGROUNDDOWN((uint)P2V(physical_addr));
+    return copyout(myproc()->pgdir, (uint)buffer, (void*)physical, PGSIZE);
 }
 
 

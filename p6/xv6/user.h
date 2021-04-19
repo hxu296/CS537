@@ -1,5 +1,6 @@
 struct stat;
 struct rtcdate;
+struct pt_entry;
 
 // system calls
 int fork(void);
@@ -23,6 +24,8 @@ int getpid(void);
 char* sbrk(int);
 int sleep(int);
 int uptime(void);
+int dump_rawphymem(uint, char*);
+int getpgtable(struct pt_entry*, int, int);
 
 // ulib.c
 int stat(const char*, struct stat*);
