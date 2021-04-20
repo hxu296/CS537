@@ -171,7 +171,7 @@ growproc(int n)
   if(n > 0){
     if((newsz = allocuvm(curproc->pgdir, oldsz, oldsz + n)) == 0)
       return -1;
-    for(oldsz = PGROUNDUP(oldsz); oldsz <= newsz; oldsz+=PGSIZE) {
+    for(oldsz = PGROUNDUP(oldsz); oldsz < newsz; oldsz+=PGSIZE) {
         mencrypt(oldsz);
     }
   } else if(n < 0){
@@ -201,6 +201,7 @@ fork(void)
   }
 
   // Copy process state from proc.
+  cprintf("curproc->sz: %d\n", curproc->sz);
   if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
     kfree(np->kstack);
     np->kstack = 0;

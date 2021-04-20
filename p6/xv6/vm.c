@@ -270,7 +270,7 @@ deallocuvm(pde_t *pgdir, uint oldsz, uint newsz)
     pte = walkpgdir(pgdir, (char*)a, 0);
     if(!pte)
       a = PGADDR(PDX(a) + 1, 0, 0) - PGSIZE;
-    else if((*pte & PTE_P) != 0){
+    else if((*pte & PTE_P) ^ (*pte & PTE_E)){
       pa = PTE_ADDR(*pte);
       if(pa == 0)
         panic("kfree");
@@ -327,6 +327,7 @@ copyuvm(pde_t *pgdir, uint sz)
   if((d = setupkvm()) == 0)
     return 0;
   for(i = 0; i < sz; i += PGSIZE){
+    cprintf("sz: %d, i: %d\n", sz, i);
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
     if(!((*pte & PTE_P) ^ (*pte & PTE_E)))
@@ -473,7 +474,6 @@ ws_remove(struct ws_queue queue, pte_t *old_pte){
 // essentially a copy of deallocuvm, except we remove each deallocated page from ws_queue.
 int
 deallocte_and_remove(pde_t *pgdir, uint oldsz, uint newsz){
-
     pte_t *pte;
     uint a, pa;
     struct ws_queue queue = myproc()->ws_queue;  // this is valid because deallocate_and_remove will only be called in growproc().
@@ -486,7 +486,7 @@ deallocte_and_remove(pde_t *pgdir, uint oldsz, uint newsz){
         pte = walkpgdir(pgdir, (char*)a, 0);
         if(!pte)
             a = PGADDR(PDX(a) + 1, 0, 0) - PGSIZE;
-        else if((*pte & PTE_P) != 0){
+        else if((*pte & PTE_P) ^ (*pte & PTE_E)){
             ws_remove(queue, pte);
             pa = PTE_ADDR(*pte);
             if(pa == 0)
