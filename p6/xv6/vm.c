@@ -6,6 +6,7 @@
 #include "mmu.h"
 #include "proc.h"
 #include "elf.h"
+#include "ptentry.h"
 
 extern char data[];  // defined by kernel.ld
 pde_t *kpgdir;  // for use in scheduler()
@@ -394,44 +395,46 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 
 // insert new_pte to queue. Assume queue is not full.
 void
-ws_enqueue(struct ws_queue queue, pte_t *new_pte)
+ws_enqueue(struct ws_queue *queue, pte_t *new_pte)
 {
-    if(queue.empty){
-        (queue.pte_buffer)[queue.tail_index] = new_pte;
-        queue.head = queue.tail = new_pte;
-        queue.empty = 0;
+    if(queue->empty){
+        (queue->pte_buffer)[queue->tail_index] = new_pte;
+        queue->head = queue->tail = new_pte;
+        queue->empty = 0;
     } else {
-        int new_tail_index = (queue.tail_index + 1) % CLOCKSIZE; // new_tail should be right next to the old tail.
-        (queue.pte_buffer)[new_tail_index] = new_pte; // insert new page at index new_tail_index.
-        queue.tail_index = new_tail_index;
-        queue.tail = new_pte;
+        int new_tail_index = (queue->tail_index + 1) % CLOCKSIZE; // new_tail should be right next to the old tail.
+        (queue->pte_buffer)[new_tail_index] = new_pte; // insert new page at index new_tail_index.
+        queue->tail_index = new_tail_index;
+        queue->tail = new_pte;
     }
 
-    queue.size++;
-    queue.full = queue.size == CLOCKSIZE;
+    queue->size++;
+    
+    queue->full = (queue->size == CLOCKSIZE);
+    *new_pte |= PTE_Q;
 }
 
 // pop the head of the queue. Assume queue is not empty.
 // return the popped pte.
 pte_t*
-ws_dequeue(struct ws_queue queue){
+ws_dequeue(struct ws_queue *queue){
     pte_t* old_head;
 
-    old_head = queue.head;
-    (queue.pte_buffer)[queue.head_index] = 0;
+    old_head = queue->head;
+    (queue->pte_buffer)[queue->head_index] = 0;
 
-    if(queue.head == queue.tail){
-        queue.head = queue.tail = 0;
-        queue.empty = 1;
+    if(queue->head == queue->tail){
+        queue->head = queue->tail = 0;
+        queue->empty = 1;
     } else{
-        int new_head_index = (queue.head_index + 1) % CLOCKSIZE;
-        queue.head_index = new_head_index;
-        queue.head = (queue.pte_buffer)[new_head_index];
+        int new_head_index = (queue->head_index + 1) % CLOCKSIZE;
+        queue->head_index = new_head_index;
+        queue->head = (queue->pte_buffer)[new_head_index];
     }
 
-    queue.size--;
-    queue.full = queue.size == CLOCKSIZE;
-
+    queue->size--;
+    queue->full = (queue->size == CLOCKSIZE);
+    *old_head &= ~PTE_Q;
     return old_head;
 }
 
@@ -439,8 +442,8 @@ ws_dequeue(struct ws_queue queue){
 // return 0 on success, -1 if old_pte is not in queue.
 // TODO: test this implementation.
 int
-ws_remove(struct ws_queue queue, pte_t *old_pte){
-    if(old_pte == queue.head){
+ws_remove(struct ws_queue *queue, pte_t *old_pte){
+    if(old_pte == queue->head){
         // this branch also takes care of old_pte == queue.head == queue.tail.
         ws_dequeue(queue);
         return 0;
@@ -449,7 +452,7 @@ ws_remove(struct ws_queue queue, pte_t *old_pte){
     // find buffer index of old_pte.
     int pte_index = 0;
     for(; pte_index < CLOCKSIZE; pte_index++)
-        if(queue.pte_buffer[pte_index] == old_pte)
+        if(queue->pte_buffer[pte_index] == old_pte)
             break;
 
     // return -1 if old_pte is not in queue.
@@ -457,16 +460,16 @@ ws_remove(struct ws_queue queue, pte_t *old_pte){
         return -1;
 
     // old_pte found. Shift all entries from pte_index to tail_index to their left by 1.
-    for(int i = pte_index; i != queue.tail_index; i = (i + CLOCKSIZE + 1) % CLOCKSIZE)
-        queue.pte_buffer[i] = queue.pte_buffer[(i + CLOCKSIZE + 1) % CLOCKSIZE];
+    for(int i = pte_index; i != queue->tail_index; i = (i + CLOCKSIZE + 1) % CLOCKSIZE)
+        queue->pte_buffer[i] = queue->pte_buffer[(i + CLOCKSIZE + 1) % CLOCKSIZE];
 
     // update buffer, tail, and tail_index.
-    queue.pte_buffer[queue.tail_index] = 0;
-    queue.tail_index = (queue.tail_index + CLOCKSIZE - 1) % CLOCKSIZE;
-    queue.tail = queue.pte_buffer[queue.tail_index];
+    queue->pte_buffer[queue->tail_index] = 0;
+    queue->tail_index = (queue->tail_index + CLOCKSIZE - 1) % CLOCKSIZE;
+    queue->tail = queue->pte_buffer[queue->tail_index];
 
-    queue.size--;
-    queue.full = queue.size == CLOCKSIZE;
+    queue->size--;
+    queue->full = (queue->size == CLOCKSIZE);
 
     return 0;
 }
@@ -476,7 +479,7 @@ int
 deallocte_and_remove(pde_t *pgdir, uint oldsz, uint newsz){
     pte_t *pte;
     uint a, pa;
-    struct ws_queue queue = myproc()->ws_queue;  // this is valid because deallocate_and_remove will only be called in growproc().
+    struct ws_queue *queue = &(myproc()->ws_queue);  // this is valid because deallocate_and_remove will only be called in growproc().
 
     if(newsz >= oldsz)
         return oldsz;
@@ -513,6 +516,7 @@ mencrypt1(pte_t *pte)
     // set encrypted to 1, set present to 0.
     *pte = *pte | PTE_E;
     *pte = *pte & (~PTE_P);
+    *pte = *pte & ~PTE_A;
 
     // flush TLB
     switchuvm(myproc());
@@ -535,10 +539,10 @@ mencrypt(uint uva){
 // helper method for mdecrypt.
 // here we implement the clock algorithm to find and evict a victim page.
 void
-clock_evict(struct ws_queue queue){
+clock_evict(struct ws_queue *queue){
     // find victim page.
-    while(*(queue.head) & PTE_A) {
-        *(queue.head) = *(queue.head) & ~PTE_A;  // if ref bit is set, clear the ref bit.
+    while(*(queue->head) & PTE_A) {
+        *(queue->head) = *(queue->head) & ~PTE_A;  // if ref bit is set, clear the ref bit.
         ws_enqueue(queue, ws_dequeue(queue));  // put head to tail.
     }
     // victim page is queue.head, dequeue the victim page.
@@ -554,7 +558,7 @@ mdecrypt(uint uva)
 {
     struct proc * p = myproc();
     pde_t *pgdir = p->pgdir;
-    struct ws_queue queue = p->ws_queue;
+    struct ws_queue *queue = &(p->ws_queue);
 
     // decrypt the page that uva belongs to.
     if(uva >= KERNBASE) // sanity check.
@@ -570,18 +574,67 @@ mdecrypt(uint uva)
     // reset pte flags.
     *pte = (*pte) | PTE_P;
     *pte = (*pte) & (~PTE_E);
+    
 
     // add pte to process's ws_queue using the clock algorithm.
-    if(queue.full){
+    if(queue->full){
         // queue is full. Find and evict a victim page.
         clock_evict(queue);
     }
     // at this stage, queue should have some free space left. Enqueue pte.
     ws_enqueue(queue, pte);
-
+    //ntf("size:%d addr:%x\n",queue->size, &queue);
     // TODO: add some debug utility.
 
     return 0;
+}
+int 
+getpgtable(struct pt_entry* entries, int num, int wsetOnly) {
+if(wsetOnly != 1 && wsetOnly != 0) {
+  return -1;
+}
+
+
+int i = 0;
+pte_t *pte;
+
+
+//TODO: Test Checking on working set.
+
+
+for(int kva = PGROUNDDOWN(myproc()->sz-1); kva>=0; kva = kva - PGSIZE) { //minus 1- because size wouldn't round down to page bottom
+  pte = walkpgdir(myproc()->pgdir, (char*)kva, 0);
+  if(pte == 0) {
+    continue;
+  }
+  if(wsetOnly == 1 && ((*pte&PTE_Q) == 0)) { //PTE_Q is set upon enqueue and dequeue, so this bit should show working set status
+    continue;
+  }
+
+  entries[i].pdx = PDX(kva);
+  entries[i].ptx = PTX(kva);
+  entries[i].ppage = PTE_ADDR(*pte)>>12;
+  entries[i].writable = *pte & PTE_W ? 1 : 0;
+  entries[i].present = *pte & PTE_P ? 1 : 0;
+  entries[i].encrypted = *pte & PTE_E ? 1 : 0;
+  entries[i].ref = *pte & PTE_A ? 1 : 0;
+
+  i++;
+  if(i==num) {
+    break;
+  }
+}
+switchuvm(myproc());
+return i;
+}
+
+
+
+int
+dump_rawphymem(uint physical_addr, char* buffer) {
+    *buffer = *buffer;
+    uint physical = PGROUNDDOWN((uint)P2V(physical_addr));
+    return copyout(myproc()->pgdir, (uint)buffer, (void*)physical, PGSIZE);
 }
 
 

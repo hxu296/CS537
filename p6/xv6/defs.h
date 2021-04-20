@@ -10,7 +10,7 @@ struct sleeplock;
 struct stat;
 struct superblock;
 struct ws_queue;
-
+struct pt_entry;
 // bio.c
 void            binit(void);
 struct buf*     bread(uint, uint);
@@ -189,6 +189,7 @@ void            clearpteu(pde_t *pgdir, char *uva);
 int             mdecrypt(uint);
 int             mencrypt(uint);
 int             deallocte_and_remove(pde_t*, uint, uint);
-
+int             getpgtable(struct pt_entry* entries, int num, int wsetOnly);
+int             dump_rawphymem(uint physical_addr, char* buffer);
 // number of elements in fixed-size array
 #define NELEM(x) (sizeof(x)/sizeof((x)[0]))
