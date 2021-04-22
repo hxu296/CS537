@@ -188,7 +188,7 @@ int             copyout(pde_t*, uint, void*, uint);
 void            clearpteu(pde_t *pgdir, char *uva);
 int             mdecrypt(uint);
 int             mencrypt(uint);
-int             deallocte_and_remove(pde_t*, uint, uint);
+int             deallocte_and_remove(pde_t*, struct ws_queue*, uint, uint);
 int             getpgtable(struct pt_entry* entries, int num, int wsetOnly);
 int             dump_rawphymem(uint physical_addr, char* buffer);
 // number of elements in fixed-size array

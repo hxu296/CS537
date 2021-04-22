@@ -328,7 +328,7 @@ copyuvm(pde_t *pgdir, uint sz)
   if((d = setupkvm()) == 0)
     return 0;
   for(i = 0; i < sz; i += PGSIZE){
-    cprintf("sz: %d, i: %d\n", sz, i);
+    cprintf("copyuvm: sz: %d, i: %d\n", sz, i);
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
     if(!((*pte & PTE_P) ^ (*pte & PTE_E)))
@@ -435,6 +435,7 @@ ws_dequeue(struct ws_queue *queue){
     queue->size--;
     queue->full = (queue->size == CLOCKSIZE);
     *old_head &= ~PTE_Q;
+
     return old_head;
 }
 
@@ -470,36 +471,9 @@ ws_remove(struct ws_queue *queue, pte_t *old_pte){
 
     queue->size--;
     queue->full = (queue->size == CLOCKSIZE);
+    *old_pte &= ~PTE_Q;
 
     return 0;
-}
-
-// essentially a copy of deallocuvm, except we remove each deallocated page from ws_queue.
-int
-deallocte_and_remove(pde_t *pgdir, uint oldsz, uint newsz){
-    pte_t *pte;
-    uint a, pa;
-    struct ws_queue *queue = &(myproc()->ws_queue);  // this is valid because deallocate_and_remove will only be called in growproc().
-
-    if(newsz >= oldsz)
-        return oldsz;
-
-    a = PGROUNDUP(newsz);
-    for(; a  < oldsz; a += PGSIZE){
-        pte = walkpgdir(pgdir, (char*)a, 0);
-        if(!pte)
-            a = PGADDR(PDX(a) + 1, 0, 0) - PGSIZE;
-        else if((*pte & PTE_P) ^ (*pte & PTE_E)){
-            ws_remove(queue, pte);
-            pa = PTE_ADDR(*pte);
-            if(pa == 0)
-                panic("kfree");
-            char *v = P2V(pa);
-            kfree(v);
-            *pte = 0;
-        }
-    }
-    return newsz;
 }
 
 // encrypt the page described by pte.
@@ -516,7 +490,7 @@ mencrypt1(pte_t *pte)
     // set encrypted to 1, set present to 0.
     *pte = *pte | PTE_E;
     *pte = *pte & (~PTE_P);
-    *pte = *pte & ~PTE_A;
+    // *pte = *pte & ~PTE_A;
 
     // flush TLB
     switchuvm(myproc());
@@ -551,19 +525,8 @@ clock_evict(struct ws_queue *queue){
     if(*victim & PTE_P) mencrypt1(victim);
 }
 
-// decrypt will be called in trap.c when we encounter a page fault.
-// decrypt the page that uva belongs to and add its pte to the process's ws_queue.
 int
-mdecrypt(uint uva)
-{
-    struct proc * p = myproc();
-    pde_t *pgdir = p->pgdir;
-    struct ws_queue *queue = &(p->ws_queue);
-
-    // decrypt the page that uva belongs to.
-    if(uva >= KERNBASE) // sanity check.
-        return -1;
-    pte_t *pte = walkpgdir(pgdir, (void*) uva, 0);
+mdecrypt1(pte_t *pte){
     // filter out real page fault.
     if(!pte || (*pte == 0) || !(*pte & PTE_E))
         return -1;
@@ -574,7 +537,26 @@ mdecrypt(uint uva)
     // reset pte flags.
     *pte = (*pte) | PTE_P;
     *pte = (*pte) & (~PTE_E);
-    
+    return 0;
+}
+
+// decrypt will be called in trap.c when we encounter a page fault.
+// decrypt the page that uva belongs to and add its pte to the process's ws_queue.
+int
+mdecrypt(uint uva)
+{
+    cprintf("mdecrypt: uva: %d\n", uva);
+    struct proc * p = myproc();
+    pde_t *pgdir = p->pgdir;
+    struct ws_queue *queue = &(p->ws_queue);
+
+    // decrypt the page that uva belongs to.
+    if(uva >= KERNBASE) // sanity check.
+        return -1;
+    pte_t *pte = walkpgdir(pgdir, (void*) uva, 0);
+
+    if(mdecrypt1(pte) != 0)
+        return -1;
 
     // add pte to process's ws_queue using the clock algorithm.
     if(queue->full){
@@ -584,10 +566,39 @@ mdecrypt(uint uva)
     // at this stage, queue should have some free space left. Enqueue pte.
     ws_enqueue(queue, pte);
     //ntf("size:%d addr:%x\n",queue->size, &queue);
-    // TODO: add some debug utility.
 
     return 0;
 }
+
+// essentially a copy of deallocuvm, except we remove each deallocated page from ws_queue.
+int
+deallocte_and_remove(pde_t *pgdir, struct ws_queue *queue, uint oldsz, uint newsz){
+    pte_t *pte;
+    uint a, pa;
+
+    if(newsz >= oldsz)
+        return oldsz;
+
+    a = PGROUNDUP(newsz);
+    for(; a  < oldsz; a += PGSIZE){
+        pte = walkpgdir(pgdir, (char*)a, 0);
+        if(!pte)
+            a = PGADDR(PDX(a) + 1, 0, 0) - PGSIZE;
+        else if((*pte & PTE_P) ^ (*pte & PTE_E)){
+            ws_remove(queue, pte);
+            mdecrypt1(pte);
+            pa = PTE_ADDR(*pte);
+            if(pa == 0)
+                panic("kfree");
+            char *v = P2V(pa);
+            kfree(v);
+            *pte = 0;
+        }
+    }
+    cprintf("deallocate_and_remove: newsz: %d\n", newsz);
+    return newsz;
+}
+
 int 
 getpgtable(struct pt_entry* entries, int num, int wsetOnly) {
 if(wsetOnly != 1 && wsetOnly != 0) {

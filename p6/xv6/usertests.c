@@ -590,7 +590,9 @@ createdelete(void)
   printf(1, "createdelete test\n");
 
   for(pi = 0; pi < 4; pi++){
+    printf(1, "usertests: start fork\n");
     pid = fork();
+    printf(1, "usertests: end fork\n");
     if(pid < 0){
       printf(1, "fork failed\n");
       exit();
@@ -1425,19 +1427,26 @@ sbrktest(void)
   a = sbrk(0);
   int i;
   for(i = 0; i < 5000; i++){
+    printf(1, "in loop %d\n", i);
     b = sbrk(1);
     if(b != a){
-      printf(stdout, "sbrk test failed %d %x %x\n", i, a, b);
+      printf(stdout, "sbrk test failed %d %d %d\n", i, a, b);
       exit();
     }
     *b = 1;
     a = b + 1;
   }
+
+  printf(1, "first test succeed\n");
+
   pid = fork();
   if(pid < 0){
     printf(stdout, "sbrk test fork failed\n");
     exit();
   }
+
+    printf(1, "second test succeed\n");
+
   c = sbrk(1);
   c = sbrk(1);
   if(c != a + 1){
@@ -1756,7 +1765,9 @@ main(int argc, char *argv[])
   }
   close(open("usertests.ran", O_CREATE));
 
-  argptest();
+  printf(1, "usertests: pid before argtest: %d\n",getpid());
+  //argptest();
+  printf(1, "usertests: pid after argtest: %d\n",getpid());
   createdelete();
   linkunlink();
   concreate();

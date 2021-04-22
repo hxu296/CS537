@@ -65,6 +65,7 @@ exec(char *path, char **argv)
   sz = PGROUNDUP(sz);
   if((sz = allocuvm(pgdir, sz, sz + 2*PGSIZE)) == 0)
     goto bad;
+  cprintf("allocuvm sz: %d\n", sz);
   clearpteu(pgdir, (char*)(sz - 2*PGSIZE));
   sp = sz;
 
@@ -99,12 +100,17 @@ exec(char *path, char **argv)
   curproc->sz = sz;
   curproc->tf->eip = elf.entry;  // main
   curproc->tf->esp = sp;
+  curproc->ws_queue = (const struct ws_queue){0}; // initialize all bits in struct to 0.
+  curproc->ws_queue.empty = 1; // overwrite empty to 1.
+  cprintf("fork: curproc->name: %s\n", curproc->name);
+  cprintf("exec: curproc->sz: %d\n", curproc->sz);
+  switchuvm(curproc);
+  freevm(oldpgdir);
   // encrypt from 0 to sz.
   for(uint uva = 0; uva < sz; uva += PGSIZE){
       mencrypt(uva);
   }
-  switchuvm(curproc);
-  freevm(oldpgdir);
+    cprintf("exec: curproc->sz after switch: %d\n", curproc->sz);
   return 0;
 
  bad:
