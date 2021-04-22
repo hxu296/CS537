@@ -1427,7 +1427,6 @@ sbrktest(void)
   a = sbrk(0);
   int i;
   for(i = 0; i < 5000; i++){
-    printf(1, "in loop %d\n", i);
     b = sbrk(1);
     if(b != a){
       printf(stdout, "sbrk test failed %d %d %d\n", i, a, b);
@@ -1437,7 +1436,6 @@ sbrktest(void)
     a = b + 1;
   }
 
-  printf(1, "first test succeed\n");
 
   pid = fork();
   if(pid < 0){
@@ -1445,7 +1443,6 @@ sbrktest(void)
     exit();
   }
 
-    printf(1, "second test succeed\n");
 
   c = sbrk(1);
   c = sbrk(1);

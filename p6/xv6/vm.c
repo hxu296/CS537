@@ -328,7 +328,6 @@ copyuvm(pde_t *pgdir, uint sz)
   if((d = setupkvm()) == 0)
     return 0;
   for(i = 0; i < sz; i += PGSIZE){
-    cprintf("copyuvm: sz: %d, i: %d\n", sz, i);
     if((pte = walkpgdir(pgdir, (void *) i, 0)) == 0)
       panic("copyuvm: pte should exist");
     if(!((*pte & PTE_P) ^ (*pte & PTE_E)))
@@ -545,7 +544,6 @@ mdecrypt1(pte_t *pte){
 int
 mdecrypt(uint uva)
 {
-    cprintf("mdecrypt: uva: %d\n", uva);
     struct proc * p = myproc();
     pde_t *pgdir = p->pgdir;
     struct ws_queue *queue = &(p->ws_queue);
@@ -553,6 +551,7 @@ mdecrypt(uint uva)
     // decrypt the page that uva belongs to.
     if(uva >= KERNBASE) // sanity check.
         return -1;
+
     pte_t *pte = walkpgdir(pgdir, (void*) uva, 0);
 
     if(mdecrypt1(pte) != 0)
@@ -595,7 +594,6 @@ deallocte_and_remove(pde_t *pgdir, struct ws_queue *queue, uint oldsz, uint news
             *pte = 0;
         }
     }
-    cprintf("deallocate_and_remove: newsz: %d\n", newsz);
     return newsz;
 }
 

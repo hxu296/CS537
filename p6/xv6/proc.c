@@ -200,8 +200,8 @@ fork(void)
   }
 
   // Copy process state from proc.
-  cprintf("fork: curproc->name: %s\n", curproc->name);
-  cprintf("fork: curproc->sz: %d\n", curproc->sz);
+  // cprintf("fork: curproc->name: %s\n", curproc->name);
+  // cprintf("fork: curproc->sz: %d\n", curproc->sz);
   if((np->pgdir = copyuvm(curproc->pgdir, curproc->sz)) == 0){
     kfree(np->kstack);
     np->kstack = 0;
