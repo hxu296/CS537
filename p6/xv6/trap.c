@@ -78,10 +78,11 @@ trap(struct trapframe *tf)
     lapiceoi();
     break;
   case T_PGFLT:
-      // cprintf("in trap!\n");
+      //cprintf("in trap!\n");
       if(mdecrypt((uint)rcr2()) == 0)
           return;
-      exit();
+      else
+          exit();
 
 
   //PAGEBREAK: 13

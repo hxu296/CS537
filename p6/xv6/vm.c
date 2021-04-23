@@ -393,10 +393,51 @@ copyout(pde_t *pgdir, uint va, void *p, uint len)
 
 /************************************P6 Methods***********************/
 
+void print_pte(pte_t *pte){
+    int P = *pte & PTE_P ? 1 : 0;
+    int E = *pte & PTE_E ? 1 : 0;
+    int Q = *pte & PTE_Q ? 1 : 0;
+    int A = *pte & PTE_A ? 1 : 0;
+    cprintf("[P: %d, E: %d, Q: %d, A: %d]", P, E, Q, A);
+}
+
+void print_buff(struct ws_queue *q){
+    for(int i = 0; i < CLOCKSIZE; i++){
+        print_pte(q->pte_buffer[i]);
+        cprintf("->");
+    }
+    cprintf("end\n");
+}
+
+void print_queue(struct ws_queue *q){
+    cprintf("\n<======================================>\n");
+    cprintf("buffer: ");
+    print_buff(q);
+    cprintf("full: %d\n", q->full);
+    cprintf("empty: %d\n", q->empty);
+    cprintf("size: %d\n", q->size);
+    cprintf("head: %p\n", q->head);
+    cprintf("tail: %p\n", q->tail);
+    cprintf("head_index: %d\n", q->head_index);
+    cprintf("tail_index: %d\n", q->tail_index);
+    int runner_index = q->head_index;
+    int tail_index = q->tail_index;
+    cprintf("queue: ");
+    while(runner_index != tail_index){
+        cprintf("%p->", q->pte_buffer[runner_index]);
+        runner_index = (runner_index + 1) % CLOCKSIZE;
+    }
+    cprintf("%p->end\n", q->tail);
+    cprintf("<======================================>\n");
+}
+
 // insert new_pte to queue. Assume queue is not full.
 void
 ws_enqueue(struct ws_queue *queue, pte_t *new_pte)
 {
+    //cprintf("ws_enqueue start: ");
+    //print_queue(queue);
+
     if(queue->empty){
         (queue->pte_buffer)[queue->tail_index] = new_pte;
         queue->head = queue->tail = new_pte;
@@ -412,12 +453,18 @@ ws_enqueue(struct ws_queue *queue, pte_t *new_pte)
     
     queue->full = (queue->size == CLOCKSIZE);
     *new_pte |= PTE_Q;
+
+    //cprintf("ws_enqueue end: ");
+    //print_queue(queue);
 }
 
 // pop the head of the queue. Assume queue is not empty.
 // return the popped pte.
 pte_t*
 ws_dequeue(struct ws_queue *queue){
+    //cprintf("ws_dequeue start: ");
+    //print_queue(queue);
+
     pte_t* old_head;
 
     old_head = queue->head;
@@ -436,6 +483,9 @@ ws_dequeue(struct ws_queue *queue){
     queue->full = (queue->size == CLOCKSIZE);
     *old_head &= ~PTE_Q;
 
+    //cprintf("ws_dequeue end: ");
+    //print_queue(queue);
+
     return old_head;
 }
 
@@ -444,6 +494,9 @@ ws_dequeue(struct ws_queue *queue){
 // TODO: test this implementation.
 int
 ws_remove(struct ws_queue *queue, pte_t *old_pte){
+    //cprintf("ws_remove start: ");
+    //print_queue(queue);
+
     if(old_pte == queue->head){
         // this branch also takes care of old_pte == queue.head == queue.tail.
         ws_dequeue(queue);
@@ -473,6 +526,9 @@ ws_remove(struct ws_queue *queue, pte_t *old_pte){
     queue->full = (queue->size == CLOCKSIZE);
     *old_pte &= ~PTE_Q;
 
+    //cprintf("ws_remove end: ");
+    //print_queue(queue);
+
     return 0;
 }
 
@@ -490,7 +546,6 @@ mencrypt1(pte_t *pte)
     // set encrypted to 1, set present to 0.
     *pte = *pte | PTE_E;
     *pte = *pte & (~PTE_P);
-    // *pte = *pte & ~PTE_A;
 
     // flush TLB
     switchuvm(myproc());
@@ -514,6 +569,9 @@ mencrypt(uint uva){
 // here we implement the clock algorithm to find and evict a victim page.
 void
 clock_evict(struct ws_queue *queue){
+    //cprintf("evict start: ");
+    //print_queue(queue);
+
     // find victim page.
     while(*(queue->head) & PTE_A) {
         *(queue->head) = *(queue->head) & ~PTE_A;  // if ref bit is set, clear the ref bit.
@@ -523,6 +581,9 @@ clock_evict(struct ws_queue *queue){
     pte_t *victim = ws_dequeue(queue);
     // encrypt the victim page before letting it go.
     if(*victim & PTE_P) mencrypt1(victim);
+
+    //cprintf("evict end: ");
+    //print_queue(queue);
 }
 
 int
@@ -565,7 +626,6 @@ mdecrypt(uint uva)
     }
     // at this stage, queue should have some free space left. Enqueue pte.
     ws_enqueue(queue, pte);
-    //ntf("size:%d addr:%x\n",queue->size, &queue);
 
     return 0;
 }
@@ -586,7 +646,6 @@ deallocte_and_remove(pde_t *pgdir, struct ws_queue *queue, uint oldsz, uint news
             a = PGADDR(PDX(a) + 1, 0, 0) - PGSIZE;
         else if((*pte & PTE_P) ^ (*pte & PTE_E)){
             ws_remove(queue, pte);
-            mdecrypt1(pte);
             pa = PTE_ADDR(*pte);
             if(pa == 0)
                 panic("kfree");

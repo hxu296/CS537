@@ -1427,6 +1427,7 @@ sbrktest(void)
   a = sbrk(0);
   int i;
   for(i = 0; i < 5000; i++){
+    //printf(1, "loop %d\n", i);
     b = sbrk(1);
     if(b != a){
       printf(stdout, "sbrk test failed %d %d %d\n", i, a, b);
@@ -1436,6 +1437,7 @@ sbrktest(void)
     a = b + 1;
   }
 
+  // printf(1, "passed sbrk loop\n");
 
   pid = fork();
   if(pid < 0){
@@ -1762,9 +1764,7 @@ main(int argc, char *argv[])
   }
   close(open("usertests.ran", O_CREATE));
 
-  printf(1, "usertests: pid before argtest: %d\n",getpid());
-  //argptest();
-  printf(1, "usertests: pid after argtest: %d\n",getpid());
+  argptest();
   createdelete();
   linkunlink();
   concreate();
