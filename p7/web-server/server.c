@@ -23,13 +23,13 @@
 // Most of the work is done within routines written in request.c
 //
 
-struct stat_struct {
+typedef struct stat_struct {
   pthread_t TID;
   int static_requests;
   int dynamic_requests;
-};
+}slot_t;
 
-struct thread_arg {
+typedef struct {
     pthread_mutex_t mutex;
     pthread_cond_t full;
     pthread_cond_t empty;
@@ -39,7 +39,8 @@ struct thread_arg {
     pthread_t producer_buffer[NUM_BUFFERS];
     int requests_buffer[NUM_BUFFERS];
     int buffer_status[NUM_BUFFERS];
-};
+    slot_t* shm_slot_ptr;
+}thread_arg;
 
 // server related.
 int listenfd;
@@ -48,28 +49,42 @@ int num_threads;
 int port;
 char* shm_name;
 
+void record_stat(void* arg_ptr, int request_type){
+    thread_arg *a = (thread_arg*)arg_ptr;
+    pthread_t TID = pthread_self();
+    // find pthread shm slot.
+    int shm_index = 0;
+    for(; shm_index < num_buffers; shm_index++)
+        if(TID == a->consumer_buffer[shm_index]) break;
+    // record relevant statistics.
+    a->shm_slot_ptr[shm_index].TID = TID;
+    if(request_type == DYNAMIC)
+        a->shm_slot_ptr[shm_index].dynamic_requests++;
+    else if(request_type == STATIC)
+        a->shm_slot_ptr[shm_index].static_requests++;
+}
 
 void produce_request(void* arg_ptr, int empty_index){
-    struct thread_arg *a = (struct thread_arg*)arg_ptr;
+    thread_arg *a = (thread_arg*)arg_ptr;
     int connfd, clientlen;
     struct sockaddr_in clientaddr;
     clientlen = sizeof(clientaddr);
     connfd = Accept(listenfd, (SA *)&clientaddr, (socklen_t *) &clientlen);
-    printf("accepted conn.\n");
     a->requests_buffer[empty_index] = connfd;
     a->buffer_status[empty_index] = FULL;
 }
 
 void consume_request(void* arg_ptr, int full_index){
-    struct thread_arg *a = (struct thread_arg*)arg_ptr;
+    thread_arg *a = (thread_arg*)arg_ptr;
     int connfd = a->requests_buffer[full_index];
-    requestHandle(connfd);
+    int request_type = requestHandle(connfd);
     Close(connfd);
+    record_stat(arg_ptr, request_type);
     a->buffer_status[full_index] = EMPTY;
 }
 
 int get_empty(void* arg_ptr){
-    struct thread_arg *a = (struct thread_arg*)arg_ptr;
+    thread_arg *a = (thread_arg*)arg_ptr;
     int empty_index;
     for(int i = 0; i < num_buffers; i++){
         if(a->buffer_status[i] == EMPTY) {
@@ -83,7 +98,7 @@ int get_empty(void* arg_ptr){
 }
 
 int get_full(void* arg_ptr){
-    struct thread_arg *a = (struct thread_arg*)arg_ptr;
+    thread_arg *a = (thread_arg*)arg_ptr;
     int full_index;
     for(int i = 0; i < num_buffers; i++){
         if(a->buffer_status[i] == FULL){
@@ -97,7 +112,7 @@ int get_full(void* arg_ptr){
 }
 
 void *produce(void *arg_ptr){
-    struct thread_arg *a = (struct thread_arg*)arg_ptr;
+    thread_arg *a = (thread_arg*)arg_ptr;
     int empty_index;
     while(1){
         pthread_mutex_lock(&a->mutex);
@@ -116,7 +131,7 @@ void *produce(void *arg_ptr){
 }
 
 void *consume(void *arg_ptr){
-    struct thread_arg *a = (struct thread_arg*)arg_ptr;
+    thread_arg *a = (thread_arg*)arg_ptr;
     int full_index;
     while(1){
         pthread_mutex_lock(&a->mutex);
@@ -164,8 +179,8 @@ int main(int argc, char *argv[])
 
 
   //ACCESS SHARED PAGE MEMORY WITH THIS, CAN INDEX BY THREAD NUMBER
-  //struct stat_struct* shm_ptr =(struct stat_struct*)mmap(NULL, getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
-
+  void* shm_ptr =mmap(NULL, getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+  slot_t* shm_slot_ptr = (slot_t*) shm_ptr;
 
   // //*****************TEST MEMORY ALLOC**********************//
   // for(int i = 0; i<32; i++) {
@@ -180,14 +195,16 @@ int main(int argc, char *argv[])
   //
 
   // initialize thread_arg
-  struct thread_arg arg;
+  thread_arg arg;
   arg.num_full = 0;
   arg.num_empty = num_buffers;
+  arg.shm_slot_ptr = shm_slot_ptr;
   memset(arg.buffer_status, EMPTY, NUM_BUFFERS * sizeof(int));
   listenfd = Open_listenfd(port);
   pthread_mutex_init(&arg.mutex, NULL);
   pthread_cond_init(&arg.empty, NULL);
   pthread_cond_init(&arg.full, NULL);
+  // create producer and consumer threads.
   for(int i = 0; i < num_threads; i++)
       pthread_create(arg.consumer_buffer + i, NULL, consume, &arg);
   for(int i = 0; i < num_buffers; i++)

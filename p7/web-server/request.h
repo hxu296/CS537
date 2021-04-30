@@ -1,5 +1,8 @@
 #ifndef __REQUEST_H__
 
-void requestHandle(int fd);
+#define DYNAMIC 1
+#define STATIC 0
+
+int requestHandle(int fd);
 
 #endif
