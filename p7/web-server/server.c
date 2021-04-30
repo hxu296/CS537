@@ -11,7 +11,7 @@
 #define EMPTY 0
 #define FULL 1
 #define IN_PROGRESS 2
-#define NUM_BUFFERS 60
+#define NUM_BUFFERS 100
 
 // 
 // server.c: A very, very simple web server
@@ -134,16 +134,20 @@ void *consume(void *arg_ptr){
     }
 }
 
+void error_exit(char *argv[]){
+    fprintf(stderr, "Usage: %s <port> <threads> <buffers> <shm_name>\n", argv[0]);
+    exit(1);
+}
+
 int main(int argc, char *argv[])
 {
     // parse arguments.
-    if (argc != 5) { //TEMP FOR THE POINTER ARG
-        fprintf(stderr, "Usage: %s <port> <threads> <buffers> <shm_name>\n", argv[0]);
-        exit(1);
-    }
-    port = atoi(argv[1]);
-    num_threads = atoi(argv[2]);
-    num_buffers = atoi(argv[3]);
+    if (argc != 5) error_exit(argv);
+
+    if((port = atoi(argv[1])) == 0 || port < 0) error_exit(argv);
+    if((num_threads = atoi(argv[2])) == 0 || num_threads < 0) error_exit(argv);
+    if((num_buffers = atoi(argv[3])) == 0 || num_buffers < 0) error_exit(argv);
+
     shm_name = argv[4];
 
   printf("DEBUG: port: %d  num_threads: %d  num_buffers: %d  shm_name: %s\n", port, num_threads, num_buffers, shm_name);
@@ -195,5 +199,6 @@ int main(int argc, char *argv[])
   for(int i = 0; i < num_buffers; i++)
       pthread_join(arg.producer_buffer[i], NULL);
 
+  Close(listenfd);
   return 0;
 }
