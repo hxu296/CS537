@@ -49,12 +49,14 @@ int num_threads;
 int port;
 char* shm_name;
 
+//memory pointer
+void* shm_ptr;
 void record_stat(void* arg_ptr, int request_type){
     thread_arg *a = (thread_arg*)arg_ptr;
     pthread_t TID = pthread_self();
     // find pthread shm slot.
     int shm_index = 0;
-    for(; shm_index < num_buffers; shm_index++)
+    for(; shm_index < num_threads; shm_index++)
         if(TID == a->consumer_buffer[shm_index]) break;
     // record relevant statistics.
     a->shm_slot_ptr[shm_index].TID = TID;
@@ -154,6 +156,14 @@ void error_exit(char *argv[]){
     exit(1);
 }
 
+
+void sigIntHandler(int sig_num) {
+  munmap((char *) shm_ptr, getpagesize());
+  shm_unlink(shm_name);
+  exit(0);
+}
+
+
 int main(int argc, char *argv[])
 {
     // parse arguments.
@@ -165,12 +175,12 @@ int main(int argc, char *argv[])
 
     shm_name = argv[4];
 
-  printf("DEBUG: port: %d  num_threads: %d  num_buffers: %d  shm_name: %s\n", port, num_threads, num_buffers, shm_name);
-
+  //printf("DEBUG: port: %d  num_threads: %d  num_buffers: %d  shm_name: %s\n", port, num_threads, num_buffers, shm_name);
+    signal(SIGINT, sigIntHandler);
   //
   // CS537 (Part B): Create & initialize the shared memory region...
   //
-  int shm_fd = shm_open(argv[2], O_RDWR | O_CREAT, 0660); //CHANGE WHEN ARGS ARE IMPLEMENTED
+  int shm_fd = shm_open(shm_name, O_RDWR | O_CREAT, 0660); //CHANGE WHEN ARGS ARE IMPLEMENTED
   if(shm_fd < 0) {
     printf("ERROR: shm_open failed\n");
     exit(1);
@@ -179,7 +189,7 @@ int main(int argc, char *argv[])
 
 
   //ACCESS SHARED PAGE MEMORY WITH THIS, CAN INDEX BY THREAD NUMBER
-  void* shm_ptr =mmap(NULL, getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
+  shm_ptr =mmap(NULL, getpagesize(), PROT_READ | PROT_WRITE, MAP_SHARED, shm_fd, 0);
   slot_t* shm_slot_ptr = (slot_t*) shm_ptr;
 
   // //*****************TEST MEMORY ALLOC**********************//

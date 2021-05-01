@@ -31,4 +31,4 @@ output.cgi: output.c
 	$(CC) $(CFLAGS) -o $@ -c $<
 
 clean:
-	-rm -f $(SERVER_OBJS) $(CLIENT_OBJS) $(STAT_PROCESS_OBJS) server client output.cgi
+	-rm -f $(SERVER_OBJS) $(CLIENT_OBJS) $(STAT_PROCESS_OBJS) server client stat_process output.cgi
